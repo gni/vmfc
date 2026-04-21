@@ -196,11 +196,13 @@ ensure_shared_network() {
   fi
 
   sudo ip link set dev "$SHARED_NET_NAME" up
-
+  
+  # Flush old IPs to prevent stacking
   sudo ip addr flush dev "$SHARED_NET_NAME" 2>/dev/null || true
   sudo ip addr add "${SHARED_NET_ADDR}/24" dev "$SHARED_NET_NAME" 2>/dev/null || true
   
-  sudo iptables -t nat -A POSTROUTING -s "$SHARED_NET_CIDR" -o "$WAN_IF" -j MASQUERADE 2>/dev/null || true
+  # VPN-SAFE NAT: Apply Masquerade globally, not tied to a specific interface
+  sudo iptables -t nat -A POSTROUTING -s "$SHARED_NET_CIDR" -j MASQUERADE 2>/dev/null || true
 
   if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q "Status: active"; then
     # Allow host <-> VM communication
@@ -212,8 +214,8 @@ ensure_shared_network() {
     sudo ufw route deny in on "$SHARED_NET_NAME" to 172.16.0.0/12
     sudo ufw route deny in on "$SHARED_NET_NAME" to 192.168.0.0/16
 
-    # Allow VM -> Internet routing
-    sudo ufw route allow in on "$SHARED_NET_NAME" out on "$WAN_IF"
+    # VPN-SAFE ROUTING: Allow VM -> Internet routing out of ANY active interface
+    sudo ufw route allow in on "$SHARED_NET_NAME"
   fi
 }
 
