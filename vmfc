@@ -196,12 +196,24 @@ ensure_shared_network() {
   fi
 
   sudo ip link set dev "$SHARED_NET_NAME" up
+
+  sudo ip addr flush dev "$SHARED_NET_NAME" 2>/dev/null || true
   sudo ip addr add "${SHARED_NET_ADDR}/24" dev "$SHARED_NET_NAME" 2>/dev/null || true
+  
   sudo iptables -t nat -A POSTROUTING -s "$SHARED_NET_CIDR" -o "$WAN_IF" -j MASQUERADE 2>/dev/null || true
 
   if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q "Status: active"; then
+    # Allow host <-> VM communication
     sudo ufw allow in on "$SHARED_NET_NAME"
     sudo ufw allow out on "$SHARED_NET_NAME"
+
+    # ISOLATION - Block VMs from scanning or accessing the local LAN
+    sudo ufw route deny in on "$SHARED_NET_NAME" to 10.0.0.0/8
+    sudo ufw route deny in on "$SHARED_NET_NAME" to 172.16.0.0/12
+    sudo ufw route deny in on "$SHARED_NET_NAME" to 192.168.0.0/16
+
+    # Allow VM -> Internet routing
+    sudo ufw route allow in on "$SHARED_NET_NAME" out on "$WAN_IF"
   fi
 }
 
